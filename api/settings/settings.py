@@ -15,6 +15,18 @@ class Settings(_Settings):
     POSTGRES_PASSWORD: pydantic.SecretStr
     POSTGRES_PORT: pydantic.PositiveInt
 
+    # mail
+    MAIL_USERNAME: pydantic.EmailStr
+    MAIL_PASSWORD: pydantic.SecretStr
+    MAIL_FROM: str
+    MAIL_PORT: pydantic.PositiveInt
+    MAIL_SERVER: str
+    MAIL_FROM_NAME: str
+    MAIL_SSL: bool
+    MAIL_TLS: bool
+    USE_CREDENTIALS: bool
+    VALIDATE_CERTS: bool
+
 
 def _get_settings() -> Settings:
     settings = Settings(_env_file=find_dotenv(".env"))
