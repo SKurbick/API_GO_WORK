@@ -1,9 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from starlette.background import BackgroundTasks
+from fastapi.security import OAuth2PasswordBearer
 
 from api import endpoint
-from api.models import Profile
-from api.internal.auth import _restore_password
+from api.models import Profile, UserCreate
+from api.internal.auth.auth import _restore_password
 
 app = FastAPI()
 
@@ -21,3 +22,16 @@ async def _add_profile(data: Profile):
 @app.post("/auth/restore_password/{mail}", tags=["User profile"])
 async def restore_password(mail: str):  # +
     return await _restore_password(mail)  # + bg
+
+# @app.post("auth/signup", tags=["Registration"])
+# async def signup(
+#         user_details: UserCreate
+# ):
+#     return await _signup(user_details)
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+@app.get("/items/")
+async def read_items(token: str = Depends(oauth2_scheme)):
+    return {"token": token}
