@@ -1,4 +1,3 @@
-
 from fastapi import HTTPException, status
 from api.database import db_connect
 from api.models import Profile
@@ -13,7 +12,7 @@ async def get_all_profiles():
             """
         )
         if profiles:
-            return await profiles
+            return profiles
 
 
 async def add_profile(data: Profile):
