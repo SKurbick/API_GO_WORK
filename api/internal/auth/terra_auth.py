@@ -33,7 +33,7 @@ EXP_REFRESH_TOKEN_HOURS = 24
 
 class Auth:
     hasher = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    secret = settings.SECRET_KEY.get_secret_value()
+    # secret = settings.SECRET_KEY.get_secret_value()
 
     def encode_password(self, password):
         return self.hasher.hash(password)
@@ -94,6 +94,68 @@ class Auth:
 
 auth_handler = Auth()
 
+async def send_email(
+        template_name: str,
+        bg: BackgroundTasks,
+        contents: Union[EmailSchema, EmailSchemaForRestore],
+) -> JSONResponse:
+    if type(contents) is EmailSchema:
+        template_body = {
+            'verification_url': contents.verification_url,
+            'user_name': contents.user_name,
+            'login': contents.login,
+        }
+
+    if type(contents) is EmailSchemaForRestore:
+        template_body = {
+            'restore_code': contents.restore_code,
+            'user_name': contents.user_name,
+            'login': contents.login,
+        }
+
+    message = MessageSchema(
+        subject='Требуются действия с учетной записью Terra',
+        recipients=contents.recipient,
+        template_body=template_body,
+    )
+
+    # fm = FastMail(conf)
+
+    # await fm.send_message(message, template_name='signin.html') # WORKS ->this works
+    bg.add_task(
+        fm.send_message, message, template_name=template_name
+    )  # DOES NOT WORK -> also works as expected
+
+    return JSONResponse(
+        status_code=200,
+        content={'message': 'email was sent'},
+    )
+
+
+async def user_add(user_details: UserCreate, hashed_password: str):
+    """
+    Функция добавляет пользователя в БД
+    user_details: информация о пользователе
+    hashed_password: hash пароля
+    return: True or False
+    """
+    try:
+        async with db_connect.connect() as conn:
+            async with conn.transaction():
+                result = await conn.cursor(
+                    "INSERT INTO public.users("
+                    "login, password, user_name, user_mail) "
+                    "VALUES ($1, $2, $3, $4) "
+                    "RETURNING id;",
+                    user_details.login,
+                    hashed_password,
+                    user_details.user_name,
+                    user_details.user_mail,
+                )
+                res = await result.fetchrow()
+                return int(res["id"])
+    except Exception:
+        return -1
 
 async def _signup(
         user_details: UserCreate, bg: BackgroundTasks, request: Request
@@ -103,35 +165,35 @@ async def _signup(
     user_details: информация о пользователе
     """
     # Проверка на пустой логин
-    if not user_details.login:
-        return HTTPException(
-            status_code=500, detail="Incorrect data for registration"
-        )
-
-    # Проверка на пустую почту
-    if not user_details.user_mail:
-        return HTTPException(
-            status_code=500, detail="Incorrect data for registration"
-        )
-
-    # Проверка на пустое имя
-    if not user_details.user_name:
-        return HTTPException(
-            status_code=500, detail="Incorrect data for registration"
-        )
-
-    # Проверка на наличие пользователя с таким логином
-    user = await user_get_by_login(user_details.login)
-    if user != None:
-        return HTTPException(status_code=400, detail="User already exists")
-
-    # Проверка на наличие пользователя с такой почтой
-    user = await user_get_by_mail(user_details.user_mail)
-    if user != None:
-        return HTTPException(
-            status_code=400, detail="User with the same mail already exists"
-        )
-
+    # if not user_details.login:
+    #     return HTTPException(
+    #         status_code=500, detail="Incorrect data for registration"
+    #     )
+    #
+    # # Проверка на пустую почту
+    # if not user_details.user_mail:
+    #     return HTTPException(
+    #         status_code=500, detail="Incorrect data for registration"
+    #     )
+    #
+    # # Проверка на пустое имя
+    # if not user_details.user_name:
+    #     return HTTPException(
+    #         status_code=500, detail="Incorrect data for registration"
+    #     )
+    #
+    # # Проверка на наличие пользователя с таким логином
+    # user = await user_get_by_login(user_details.login)
+    # if user != None:
+    #     return HTTPException(status_code=400, detail="User already exists")
+    #
+    # # Проверка на наличие пользователя с такой почтой
+    # user = await user_get_by_mail(user_details.user_mail)
+    # if user != None:
+    #     return HTTPException(
+    #         status_code=400, detail="User with the same mail already exists"
+    #     )
+    #
     user_details.verification_code = await random_string()
     verification_url = request.url_for(
         "verify",

@@ -1,13 +1,17 @@
 from datetime import datetime, timedelta
+from pathlib import Path
+
 from api import endpoint
+from api.database import db_connect
+from api.internal.auth.auth import user_get_by_mail
 from api.internal.auth.terra_auth import _signup
+from api.internal.shared import random_string
 from api.models import Profile, UserCreate, User, UserInDB, Token, TokenData
-from api.internal.auth.auth import _restore_password
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import FastAPI, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from typing import Union
+from typing import Union, Dict, Any, Optional
 from fastapi import BackgroundTasks, Request, Depends, status
 
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
@@ -47,11 +51,11 @@ async def restore_password(mail: str):  # +
     return await _restore_password(mail)  # + bg
 
 
-@app.post("/auth/signup", tags=["Registration"])
-async def signup(
-        user_details: UserCreate, bg: BackgroundTasks, request: Request
-):
-    return await _signup(user_details, bg, request)
+# @app.post("/auth/signup", tags=["Registration"])
+# async def signup(
+#         user_details: UserCreate, bg: BackgroundTasks, request: Request
+# ):
+#     return await _signup(user_details, bg, request)
 
 
 # @app.get("/items/")
@@ -143,3 +147,103 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
 @app.get("/users/me/items/")
 async def read_own_items(current_user: User = Depends(get_current_active_user)):
     return [{"item_id": "Foo", "owner": current_user.username}]
+
+
+from fastapi import FastAPI
+from starlette.responses import JSONResponse
+from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
+from pydantic import EmailStr, BaseModel
+from typing import List
+
+
+class EmailSchemaForRestore(BaseModel):
+    recipient: List[EmailStr]
+    restore_code: str
+    user_name: Optional[str] = ""
+    login: Optional[str] = ""
+
+
+conf = ConnectionConfig(
+    MAIL_USERNAME="malkolm.63.zed@mail.ru",
+    MAIL_PASSWORD="mYhN9Wmk1H9WMBEyS9gn",
+    MAIL_FROM="malkolm.63.zed@mail.ru",
+    MAIL_PORT=587,
+    # MAIL_USERNAME="terra_test@internet.ru",
+    # MAIL_PASSWORD="pMCEpeMSqrgYEPD9pj4s",
+    # MAIL_FROM="terra_test@internet.ru",
+    # MAIL_PORT=587,
+    MAIL_SERVER="smtp.mail.ru",
+    MAIL_FROM_NAME="Desired Name",
+    MAIL_STARTTLS=True,
+    MAIL_SSL_TLS=False,
+    USE_CREDENTIALS=True,
+    VALIDATE_CERTS=True,
+    # MAIL_SSL="True",
+    # MAIL_TLS="False",
+
+    TEMPLATE_FOLDER=Path(__file__).parent / 'templates',
+
+)
+
+app = FastAPI()
+
+
+@app.post("/email")
+async def send_email(template_name: str,
+                     bg: BackgroundTasks,
+                     contents: EmailSchemaForRestore,
+                     ) -> JSONResponse:
+    template_body = {
+        'restore_code': contents.restore_code,
+        'user_name': contents.user_name,
+        'login': contents.login,
+    }
+
+    message = MessageSchema(
+        subject='Требуются действия с учетной записью Terra',
+        recipients=contents.recipient,
+        template_body=template_body,
+        subtype=MessageType.html,
+
+    )
+
+    fm = FastMail(conf)
+    # await fm.send_message(message, template_name="restore_pass.html")
+    bg.add_task(
+        fm.send_message, message, template_name=template_name
+    )
+    return JSONResponse(status_code=200, content={"message": "email has been sent"})
+
+
+async def _restore_password(mail: str, bg: BackgroundTasks):
+    # Запрос данных пользователя из БД
+    user_data = await user_get_by_mail(mail)
+    # Проверка на наличие пользователя с таким логином
+    if user_data is None:
+        return HTTPException(status_code=403, detail="User was not found")
+    # Проверка статуса аккаунта
+    if not user_data["active"]:
+        return HTTPException(status_code=403, detail="User is not active.")
+    # Создаем проверочный код и сохраняем в профиль
+
+    restore_code = await random_string(num=8)
+
+    async with db_connect.connect() as conn:
+        # try:
+        await conn.execute(
+            "UPDATE public.users " "SET restore_code = $2" "WHERE login = $1;",
+            user_data["login"],
+            restore_code,
+        )
+
+    email_schema = EmailSchemaForRestore(
+        recipient=[mail], restore_code=restore_code,
+        user_name=user_data["user_name"], login=user_data["login"]
+    )
+    await send_email(template_name="restore_pass.html", bg=bg, contents=email_schema)
+    return status.HTTP_200_OK
+
+
+@app.post("/auth/restore_password/{mail}", tags=["User profile"])
+async def restore_password(mail: str, bg: BackgroundTasks):
+    return await _restore_password(mail, bg)

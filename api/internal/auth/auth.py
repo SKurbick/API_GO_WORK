@@ -61,7 +61,10 @@ async def user_get_by_mail(user_mail: str):
     """
     async with db_connect.connect() as conn:
         users = await conn.fetch(
-            f"SELECT login FROM public.users WHERE user_mail = $1 ORDER BY login LIMIT 1",
+            """
+            SELECT user_name, login, password, active, verification_code, restore_code
+            FROM public.users WHERE user_mail = $1 ORDER BY login LIMIT 1
+            """,
             user_mail,
         )
         if users:
