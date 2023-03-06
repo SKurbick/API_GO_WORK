@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta
-from pathlib import Path
 
+from api.endpoint import send_email
+from api.settings import settings
 from api import endpoint
 from api.database import db_connect
 from api.internal.auth.auth import user_get_by_mail
-from api.internal.auth.terra_auth import _signup
 from api.internal.shared import random_string
-from api.models import Profile, UserCreate, User, UserInDB, Token, TokenData
+from api.models import Profile, UserCreate, User, UserInDB, Token, TokenData, EmailSchemaForRestore
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import FastAPI, HTTPException
@@ -20,20 +20,10 @@ ALGORITHM = "HS256"
 # время на обновление токена
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-fake_users_db = {
-    "johndoe": {
-        "username": "johndoe",
-        "full_name": "John Doe",
-        "email": "johndoe@example.com",
-        "hashed_password": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
-        "disabled": False,
-    }
-}
-
-hasher = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 app = FastAPI()
+hasher = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
 @app.get("/get_all_profiles", tags=["Profiles"])
@@ -49,19 +39,6 @@ async def _add_profile(data: Profile):
 @app.post("/auth/restore_password/{mail}", tags=["User profile"])
 async def restore_password(mail: str):  # +
     return await _restore_password(mail)  # + bg
-
-
-# @app.post("/auth/signup", tags=["Registration"])
-# async def signup(
-#         user_details: UserCreate, bg: BackgroundTasks, request: Request
-# ):
-#     return await _signup(user_details, bg, request)
-
-
-# @app.get("/items/")
-# async def read_items(token: str = Depends(oauth2_scheme)):
-#     return {"token": token}
-
 
 def verify_password(plain_password, hashed_password):
     return hasher.verify(plain_password, hashed_password)
@@ -97,151 +74,7 @@ def create_access_token(data: dict, expires_delta: Union[timedelta, None] = None
     return encoded_jwt
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-        token_data = TokenData(username=username)
-    except JWTError:
-        raise credentials_exception
-    user = get_user(fake_users_db, username=token_data.username)
-    if user is None:
-        raise credentials_exception
-    return user
 
-
-async def get_current_active_user(current_user: User = Depends(get_current_user)):
-    if current_user.disabled:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
-
-
-@app.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(fake_users_db, form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
-
-
-@app.get("/users/me/", response_model=User)
-async def read_users_me(current_user: User = Depends(get_current_active_user)):
-    return current_user
-
-
-@app.get("/users/me/items/")
-async def read_own_items(current_user: User = Depends(get_current_active_user)):
-    return [{"item_id": "Foo", "owner": current_user.username}]
-
-
-from fastapi import FastAPI
-from starlette.responses import JSONResponse
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
-from pydantic import EmailStr, BaseModel
-from typing import List
-
-
-class EmailSchemaForRestore(BaseModel):
-    recipient: List[EmailStr]
-    restore_code: str
-    user_name: Optional[str] = ""
-    login: Optional[str] = ""
-
-
-conf = ConnectionConfig(
-    MAIL_USERNAME="malkolm.63.zed@mail.ru",
-    MAIL_PASSWORD="mYhN9Wmk1H9WMBEyS9gn",
-    MAIL_FROM="malkolm.63.zed@mail.ru",
-    MAIL_PORT=587,
-    # MAIL_USERNAME="terra_test@internet.ru",
-    # MAIL_PASSWORD="pMCEpeMSqrgYEPD9pj4s",
-    # MAIL_FROM="terra_test@internet.ru",
-    # MAIL_PORT=587,
-    MAIL_SERVER="smtp.mail.ru",
-    MAIL_FROM_NAME="Desired Name",
-    MAIL_STARTTLS=True,
-    MAIL_SSL_TLS=False,
-    USE_CREDENTIALS=True,
-    VALIDATE_CERTS=True,
-    # MAIL_SSL="True",
-    # MAIL_TLS="False",
-
-    TEMPLATE_FOLDER=Path(__file__).parent / 'templates',
-
-)
-
-app = FastAPI()
-
-
-@app.post("/email")
-async def send_email(template_name: str,
-                     bg: BackgroundTasks,
-                     contents: EmailSchemaForRestore,
-                     ) -> JSONResponse:
-    template_body = {
-        'restore_code': contents.restore_code,
-        'user_name': contents.user_name,
-        'login': contents.login,
-    }
-
-    message = MessageSchema(
-        subject='Требуются действия с учетной записью Terra',
-        recipients=contents.recipient,
-        template_body=template_body,
-        subtype=MessageType.html,
-
-    )
-
-    fm = FastMail(conf)
-    # await fm.send_message(message, template_name="restore_pass.html")
-    bg.add_task(
-        fm.send_message, message, template_name=template_name
-    )
-    return JSONResponse(status_code=200, content={"message": "email has been sent"})
-
-
-async def _restore_password(mail: str, bg: BackgroundTasks):
-    # Запрос данных пользователя из БД
-    user_data = await user_get_by_mail(mail)
-    # Проверка на наличие пользователя с таким логином
-    if user_data is None:
-        return HTTPException(status_code=403, detail="User was not found")
-    # Проверка статуса аккаунта
-    if not user_data["active"]:
-        return HTTPException(status_code=403, detail="User is not active.")
-    # Создаем проверочный код и сохраняем в профиль
-
-    restore_code = await random_string(num=8)
-
-    async with db_connect.connect() as conn:
-        # try:
-        await conn.execute(
-            "UPDATE public.users " "SET restore_code = $2" "WHERE login = $1;",
-            user_data["login"],
-            restore_code,
-        )
-
-    email_schema = EmailSchemaForRestore(
-        recipient=[mail], restore_code=restore_code,
-        user_name=user_data["user_name"], login=user_data["login"]
-    )
-    await send_email(template_name="restore_pass.html", bg=bg, contents=email_schema)
-    return status.HTTP_200_OK
 
 
 @app.post("/auth/restore_password/{mail}", tags=["User profile"])
