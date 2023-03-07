@@ -49,3 +49,5 @@ with smtplib.SMTP(smtp_server, port) as server:
     server.starttls(context=context)
     server.login(MAIL_USERNAME, MAIL_PASSWORD)
     server.sendmail(MAIL_USERNAME, "frenkjust@mail.ru", message)
+
+testperem = 0
