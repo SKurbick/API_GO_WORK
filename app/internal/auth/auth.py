@@ -1,5 +1,5 @@
-from api.database import db_connect
-from api.models import Profile, EmailSchema, EmailSchemaForRestore, UserCreate
+from app.database import db_connect
+from app.models import Profile, EmailSchema, EmailSchemaForRestore, UserCreate
 
 
 async def user_add(user_details: UserCreate, hashed_password: str):
