@@ -31,3 +31,5 @@ SQLAlchemy==2.0.4
 starlette==0.25.0
 typing_extensions==4.5.0
 uvicorn==0.20.0
+aiopg
+pyjwt

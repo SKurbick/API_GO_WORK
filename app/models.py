@@ -37,5 +37,3 @@ class EmailSchemaForRestore(BaseModel):
     restore_code: str
     user_name: Optional[str] = ""
     login: Optional[str] = ""
-
-

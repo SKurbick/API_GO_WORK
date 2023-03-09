@@ -1,8 +1,9 @@
 from typing import Optional
 
-from pydantic import SecretStr, EmailStr, BaseModel
+from pydantic import SecretStr, EmailStr
 from pydantic.fields import Field
 from pydantic.types import PositiveInt
+from .base import BaseModel
 
 
 class UserFields:
@@ -36,3 +37,16 @@ class CreateUserCommand(BaseUser):
 
 class UserActivate(CreateUserCommand):
     activate_verification_code: str = None
+
+
+class UserToken(BaseUser):
+    access_token: SecretStr
+    refresh_token: SecretStr
+
+
+class UserRefreshToken(UserToken):
+    ...
+
+class EmaiSchema:
+    pass
+
