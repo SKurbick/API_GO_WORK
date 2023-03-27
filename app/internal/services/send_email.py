@@ -1,6 +1,6 @@
 from typing import Union
 
-from fastapi_mail import FastMail, MessageSchema, errors
+from fastapi_mail import FastMail, MessageSchema, errors, MessageType
 from starlette.background import BackgroundTasks
 from app.pkg.settings import config_email
 from app.pkg import models
@@ -32,7 +32,10 @@ class SendEmail:
                 subject='Требуются действия с учетной записью Fund Incubator',
                 recipients=contents.recipient,
                 subtype="html",
-                template_body=template_body
+                template_body=template_body,
+                # add
+                subtipe=MessageType.html,
+
             )
 
             fm = FastMail(config_email)

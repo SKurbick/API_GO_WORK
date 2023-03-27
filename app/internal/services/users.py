@@ -45,25 +45,34 @@ class Users:
             request,
             background_task
     ) -> models.User:
-        try:
-            cmd.password = auth_handler.encode_password(cmd.password.get_secret_value())
-            # создаем пользователя и верификационный код в бд
-            cmd.activate_verification_code = await SendEmail.random_string()
-            user = await self.repository.create(cmd=cmd)
-            # ссылка активации
-            try:
-                activate_verification_url = request.url_for(
-                    "verify",
-                    user_email=cmd.email,
-                    ver_code=cmd.activate_verification_code,
-                )
-                email_schema = ActivateUser(
-                    recipient=[cmd.email], verification_url=activate_verification_url,
-                )
-                await send.send_email(template_name='activate.html', background_task=background_task,
-                                      contents=email_schema)
-            except Exception:
-                raise SendingError
-            return user
-        except UniqueViolation:
-            raise UserAlreadyExist
+        # try:
+        cmd.password = auth_handler.encode_password(cmd.password.get_secret_value())
+        # создаем пользователя и верификационный код в бд
+        # cmd.activate_verification_code = await SendEmail.random_string()
+        user = await self.repository.create(cmd=cmd)
+        # ссылка активации
+        # try:
+        # activate_verification_url = request.url_for(
+        #     "verify",
+        #     user_email=cmd.email,
+        #     ver_code=cmd.activate_verification_code,
+        # )
+        # email_schema = ActivateUser(
+        #     recipient=[cmd.email], verification_url=activate_verification_url,
+        # )
+        # await send.send_email(template_name='restore_pass.html', background_task=background_task,
+        #                       contents=email_schema)
+        #     except Exception:
+        #         raise SendingError
+        return user
+
+    # except UniqueViolation:
+    #     raise UserAlreadyExist
+
+    async def read_all_users(
+            self,
+            query: Optional[models.ReadAllUsersQuery] = None
+    ) -> List[models.User]:
+        if not query:
+            query = models.ReadAllUsersQuery()
+        return await self.repository.read_all(query=query)

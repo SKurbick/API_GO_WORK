@@ -47,6 +47,10 @@ class UserToken(BaseUser):
 class UserRefreshToken(UserToken):
     ...
 
+
 class EmaiSchema:
     pass
 
+
+class ReadAllUsersQuery(BaseUser):
+    ...

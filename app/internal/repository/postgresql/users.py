@@ -1,3 +1,5 @@
+from typing import List
+
 from app.pkg import models
 from app.internal.repository.postgresql.cursor import get_cursor
 from app.internal.repository.handlers.postgresql.collect_response import collect_response
@@ -9,18 +11,17 @@ class User(Repository):
     async def create(self, cmd: models.CreateUserCommand) -> models.User:
         create_user = """
             insert into users(
-                    email, password, name, username, display_the_real_name, phone_number, activate_verification_code
+                    email, password, name, username, activate_verification_code, telegram_profile
             )
                 values (
                     %(email)s,
                     %(password)s,
                     %(name)s,
                     %(username)s,
-                    %(display_the_real_name)s,
-                    %(phone_number)s,
-                    %(activate_verification_code)s
+                    %(activate_verification_code)s,
+                    %(telegram_profile)s
                 )
-            returning id, email, password, name, username, display_the_real_name, phone_number, photo_id;
+            returning id, email, password, name, username , telegram_profile;
         """
         async with get_cursor() as cur:
             await cur.execute(create_user, cmd.to_dict(show_secrets=True))
@@ -45,23 +46,21 @@ class User(Repository):
     #         await cur.execute(q, query.to_dict(show_secrets=True))
     #         return await cur.fetchone()
 
-    # @collect_response
-    # async def read_all(self, query: models.ReadAllUsersQuery) -> List[models.User]:
-    #     q = """
-    #         select
-    #             id,
-    #             email,
-    #             password,
-    #             name,
-    #             username,
-    #             display_the_real_name,
-    #             phone_number,
-    #             photo_id
-    #         from users;
-    #     """
-    #     async with get_cursor() as cur:
-    #         await cur.execute(q)
-    #         return await cur.fetchall()
+    @collect_response
+    async def read_all(self, query: models.ReadAllUsersQuery) -> List[models.User]:
+        q = """
+            select
+                id,
+                email,
+                password,
+                name,
+                username,
+                telegram_profile
+            from users;
+        """
+        async with get_cursor() as cur:
+            await cur.execute(q)
+            return await cur.fetchall()
     #
     # @collect_response
     # async def update(self, cmd: models.UpdateUserCommand) -> models.UpdateUserCommand:

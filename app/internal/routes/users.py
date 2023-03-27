@@ -1,3 +1,5 @@
+from typing import List
+
 from fastapi import APIRouter, Depends
 from starlette import status
 from dependency_injector.wiring import Provide, inject
@@ -27,3 +29,20 @@ async def create_user(
                                           background_task=background_task)
 
     return user
+
+
+@router.get(
+    "/",
+    response_model=List[models.User],
+    status_code=status.HTTP_200_OK,
+    summary="Get all users.",
+)
+@inject
+async def get_all_users(
+        user_service: services.Users = Depends(Provide[services.Services.user]),
+        # is_authorized: bool = Depends(check_jwt),
+):
+    return await user_service.read_all_users()
+
+
+
